@@ -83,11 +83,24 @@ def test_library_rejects_path_escape(tmp_path: Path):
 def test_remote_validation():
     assert ModelLibrary.validate_repo_id("org/repo") == "org/repo"
     assert (
+        ModelLibrary.validate_repo_id("https://huggingface.co/org/repo") == "org/repo"
+    )
+    assert (
+        ModelLibrary.validate_repo_id("https://huggingface.co/org/repo/tree/main")
+        == "org/repo"
+    )
+    assert ModelLibrary.validate_repo_id("hf://org/repo") == "org/repo"
+    assert ModelLibrary.validate_repo_id("org/repo.git") == "org/repo"
+    assert (
         ModelLibrary.validate_remote_name("sub/model-Q4_K_M.gguf")
         == "sub/model-Q4_K_M.gguf"
     )
     with pytest.raises(ValueError):
         ModelLibrary.validate_repo_id("not-a-repo")
+    with pytest.raises(ValueError):
+        ModelLibrary.validate_repo_id("https://example.com/org/repo")
+    with pytest.raises(ValueError):
+        ModelLibrary.validate_repo_id("https://huggingface.co/datasets/org/repo")
     with pytest.raises(ValueError):
         ModelLibrary.validate_remote_name("../secret.gguf")
 

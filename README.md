@@ -21,7 +21,6 @@ Use a CUDA/PyTorch Ubuntu template, attach a network volume at `/workspace`, and
 Create these RunPod secrets/environment variables:
 
 ```text
-GGUF_RIG_REPO=https://github.com/you/your-repository.git
 GGUF_API_KEY=<long random token>
 GGUF_PANEL_USER=<username>
 GGUF_PANEL_PASSWORD=<strong password>
@@ -38,7 +37,6 @@ cp runpod_variables.template.env runpod_variables.env
 
 Обязательно замените:
 
-- `GGUF_RIG_REPO` — URL вашего Git-репозитория;
 - `GGUF_API_KEY` — результат команды `openssl rand -hex 32`;
 - `GGUF_PANEL_PASSWORD` — отдельный сложный пароль;
 - `HF_TOKEN` — токен Hugging Face или пустое значение для публичных моделей.
@@ -59,7 +57,6 @@ cp runpod_variables.template.env runpod_variables.env
 | `GGUF_PANEL_PASSWORD` | Secret | Пароль Gradio-панели |
 | `HF_TOKEN` | Secret | Доступ к gated/private моделям Hugging Face; необязателен для публичных репозиториев |
 | `GGUF_PANEL_USER` | Environment Variable | Логин Gradio-панели |
-| `GGUF_RIG_REPO` | Environment Variable | Git URL репозитория с приложением |
 | `GGUF_SKIP_INSTALL` | Environment Variable | Значение `1` пропускает повторную установку после успешного первого запуска |
 
 Не добавляйте значения Secrets в Git, `.env.example`, startup command, URL репозитория или скриншоты. После изменения секрета перезапустите Pod.

@@ -1,5 +1,4 @@
 # Required RunPod Secrets / Environment Variables:
-#   GGUF_RIG_REPO          Git URL containing the model_runpod directory
 #   GGUF_API_KEY           Bearer token for llama-server
 #   GGUF_PANEL_USER        Basic-auth username for the Gradio panel
 #   GGUF_PANEL_PASSWORD    Strong Basic-auth password for the Gradio panel
@@ -8,7 +7,7 @@
 #
 # Expose HTTP ports 7860 (control panel) and 8000 (OpenAI-compatible API).
 
-bash -lc 'set -Eeuo pipefail; : "${GGUF_RIG_REPO:?Set GGUF_RIG_REPO}"; if [[ ! -d /workspace/gguf-rig-source/.git ]]; then git clone --depth 1 "$GGUF_RIG_REPO" /workspace/gguf-rig-source; else git -C /workspace/gguf-rig-source pull --ff-only; fi; exec bash /workspace/gguf-rig-source/model_runpod/start_runpod.sh'
+bash -lc "cd /workspace && if [ ! -d gguf-rig-source/.git ]; then git clone --depth 1 https://github.com/Dizzle700/model_runpod.git gguf-rig-source; else git -C gguf-rig-source pull --ff-only; fi && exec bash gguf-rig-source/start_runpod.sh"
 
 # HTTP Ports:
 7860,8000

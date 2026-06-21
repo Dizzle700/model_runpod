@@ -364,7 +364,8 @@ def build_app() -> gr.Blocks:
                     elem_classes="rig-note",
                 )
                 repo_id = gr.Textbox(
-                    label="Repository", placeholder="organization/repository"
+                    label="Repository",
+                    placeholder="organization/repository or https://huggingface.co/organization/repository",
                 )
                 inspect_button = gr.Button("List GGUF files")
                 remote_model = gr.Dropdown(

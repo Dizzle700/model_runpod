@@ -5,6 +5,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, Iterable
+from urllib.parse import urlparse
 
 from .config import RigConfig
 
@@ -71,10 +72,34 @@ class ModelLibrary:
 
     @staticmethod
     def validate_repo_id(repo_id: str) -> str:
-        repo_id = repo_id.strip()
-        if not REPO_RE.fullmatch(repo_id):
-            raise ValueError("Repository must look like organization/name")
-        return repo_id
+        value = repo_id.strip()
+        if value.startswith("hf://"):
+            value = value.removeprefix("hf://")
+
+        parsed = urlparse(value)
+        if parsed.scheme or parsed.netloc:
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in {
+                "huggingface.co",
+                "www.huggingface.co",
+            }:
+                raise ValueError("Only huggingface.co repository URLs are supported")
+            parts = [part for part in parsed.path.split("/") if part]
+            if parts and parts[0] == "models":
+                parts = parts[1:]
+            if len(parts) < 2 or parts[0] in {"datasets", "spaces"}:
+                raise ValueError(
+                    "The URL must point to a Hugging Face model repository"
+                )
+            value = "/".join(parts[:2])
+
+        value = value.strip("/")
+        if value.endswith(".git"):
+            value = value[:-4]
+        if not REPO_RE.fullmatch(value):
+            raise ValueError(
+                "Use organization/name or https://huggingface.co/organization/name"
+            )
+        return value
 
     @staticmethod
     def validate_remote_name(filename: str) -> str:
