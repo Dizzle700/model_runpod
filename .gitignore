@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tests, coverage, linters, and type checkers
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+runpod_variables.template.env
+
+# Secrets and local environment overrides
+.env
+.env.*
+!.env.example
+runpod_variables.env
+runpod_variables.local.env
+runpod_variables.secret.env
+!runpod_variables.template.env
+*.pem
+*.key
+
+# GGUF Rig runtime data
+data/
+models/
+logs/
+.state/
+.hf/
+*.log
+*.pid
+active_model.json
+
+# Model weights and partial downloads
+*.gguf
+*.safetensors
+*.bin
+*.part
+*.partial
+*.incomplete
+
+# Local llama.cpp checkouts/builds
+llama.cpp/
+ggml-*.so*
+/llama-server
+/llama-cli
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+runpod_variables.template.env

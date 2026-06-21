@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GGUF Inference Rig — Spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0c10;
+    --bg-elevated: #10141b;
+    --surface: #161b23;
+    --surface-2: #1b212b;
+    --border: #262e3a;
+    --text: #e8eaed;
+    --text-muted: #8c97a6;
+    --text-dim: #5c6675;
+    --amber: #e8a33d;
+    --cyan: #4fd1c5;
+    --red: #e8576b;
+    --green: #6fcf97;
+    --mono: 'Space Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(232,163,61,0.08), transparent 60%),
+      radial-gradient(ellipse 900px 500px at 90% 0%, rgba(79,209,197,0.06), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection{ background: var(--amber); color: #0a0c10; }
+
+  a{ color: var(--cyan); }
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position: sticky;
+    top:0;
+    z-index: 50;
+    background: rgba(10,12,16,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 22px 28px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-mark{
+    width: 38px; height:38px;
+    flex-shrink:0;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--amber), var(--cyan));
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--display); font-weight:800; font-size:16px; color:#0a0c10;
+  }
+  .brand-text h1{
+    font-family: var(--display); font-weight:800;
+    font-size: 19px; letter-spacing: -0.01em; margin:0 0 3px;
+  }
+  .brand-text p{ margin:0; color: var(--text-muted); font-size: 12.5px; max-width: 480px; }
+
+  .meta-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+  .pill{
+    font-size: 11px; padding: 6px 10px; border-radius: 20px;
+    border: 1px solid var(--border); color: var(--text-muted);
+    letter-spacing: 0.03em; white-space:nowrap;
+  }
+  .pill-live{ color: var(--cyan); border-color: rgba(79,209,197,0.35); display:flex; align-items:center; gap:6px; }
+  .pill-live::before{
+    content:""; width:6px; height:6px; border-radius:50%; background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+
+  /* ---------- tabs ---------- */
+  .tabs{
+    position: sticky; top: 87px; z-index: 49;
+    max-width: 1180px; margin: 0 auto;
+    display:flex; gap:2px;
+    padding: 0 28px;
+    overflow-x:auto;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar{ display:none; }
+  .tab{
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.03em;
+    color: var(--text-dim); background: none; border:none;
+    padding: 14px 14px 12px; cursor:pointer; white-space:nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .tab:hover{ color: var(--text-muted); }
+  .tab.active{ color: var(--amber); border-bottom-color: var(--amber); }
+
+  main{ max-width: 1180px; margin: 0 auto; padding: 44px 28px 100px; }
+  .panel{ display:none; animation: fadein .35s ease; }
+  .panel.active{ display:block; }
+  @keyframes fadein{ from{ opacity:0; transform: translateY(6px); } to{ opacity:1; transform:none; } }
+
+  .eyebrow{
+    font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em;
+    text-transform: uppercase; margin: 0 0 10px;
+  }
+  h2.title{
+    font-family: var(--display); font-weight:800; font-size: 30px;
+    letter-spacing:-0.01em; margin: 0 0 16px; max-width: 680px;
+  }
+  .lead{ color: var(--text-muted); max-width: 640px; margin: 0 0 36px; font-size: 14px; }
+
+  h3.sub{
+    font-family: var(--display); font-weight:700; font-size: 17px;
+    margin: 44px 0 16px; display:flex; align-items:center; gap:10px;
+  }
+  h3.sub::before{ content:""; width:14px; height:2px; background: var(--amber); display:inline-block; }
+
+  p{ color: var(--text-muted); }
+  code{
+    font-family: var(--mono); background: var(--surface-2); color: var(--cyan);
+    padding: 2px 6px; border-radius: 4px; font-size: 13px; border: 1px solid var(--border);
+  }
+
+  /* ---------- ladder (signature element) ---------- */
+  .ladder{ display:flex; flex-direction:column; gap:10px; margin: 22px 0 8px; }
+  .rung{
+    display:grid; grid-template-columns: 64px 1fr 100px;
+    align-items:center; gap:14px;
+  }
+  .rung .label{ font-weight:700; font-size:13px; color: var(--text); }
+  .rung .track{
+    height: 30px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; overflow:hidden; position:relative;
+  }
+  .rung .fill{
+    height:100%; display:flex; align-items:center; padding-left:12px;
+    font-size: 11.5px; color:#0a0c10; font-weight:700;
+    border-radius: 6px 0 0 6px;
+  }
+  .rung .size{ text-align:right; font-size: 12px; color: var(--text-muted); }
+  .ladder-caption{ font-size: 12.5px; color: var(--text-dim); margin: 14px 0 0; }
+
+  /* ---------- decision / status list ---------- */
+  .decisions{ list-style:none; margin: 0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .decisions li{
+    display:grid; grid-template-columns: 92px 1fr; gap: 16px;
+    padding: 14px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; align-items:start; font-size: 13.5px;
+  }
+  .status{ font-size:11px; font-weight:700; letter-spacing:0.03em; padding: 3px 0; white-space:nowrap; }
+  .status-done{ color: var(--green); }
+  .status-blocked{ color: var(--red); }
+  .status-open{ color: var(--amber); }
+
+  /* ---------- arch diagram ---------- */
+  .diagram{
+    display:flex; flex-wrap:wrap; gap:0; align-items:stretch;
+    margin: 26px 0 8px; background: var(--bg-elevated); border:1px solid var(--border);
+    border-radius: 12px; padding: 28px;
+  }
+  .dia-col{ display:flex; flex-direction:column; gap:10px; flex:1; min-width: 200px; justify-content:center; }
+  .dia-arrow{
+    display:flex; align-items:center; justify-content:center;
+    color: var(--text-dim); font-size: 20px; padding: 0 6px; min-width: 30px;
+  }
+  .dia-box{
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .dia-box .name{ font-family: var(--display); font-weight:700; font-size: 14px; color: var(--text); margin-bottom:4px; }
+  .dia-box .desc{ font-size: 11.5px; color: var(--text-muted); }
+  .dia-box.accent{ border-color: rgba(232,163,61,0.4); }
+  .dia-box.accent .name{ color: var(--amber); }
+  .dia-box.cyan{ border-color: rgba(79,209,197,0.4); }
+  .dia-box.cyan .name{ color: var(--cyan); }
+
+  /* ---------- tables ---------- */
+  table{ width:100%; border-collapse: collapse; margin: 18px 0 8px; font-size: 13px; }
+  th{
+    text-align:left; font-family: var(--mono); font-size: 11px; letter-spacing:0.04em;
+    color: var(--text-dim); text-transform:uppercase; padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  td{ padding: 13px 14px; border-bottom: 1px solid var(--border); color: var(--text-muted); vertical-align: top; }
+  tr td:first-child{ color: var(--text); font-weight:700; white-space:nowrap; }
+  tbody tr:hover{ background: var(--surface); }
+  .tag{ font-size: 10.5px; padding: 2px 8px; border-radius: 20px; border:1px solid var(--border); white-space:nowrap; }
+  .tag-yes{ color: var(--green); border-color: rgba(111,207,151,0.35); }
+  .tag-no{ color: var(--red); border-color: rgba(232,87,107,0.35); }
+  .tag-blocked{ color: var(--amber); border-color: rgba(232,163,61,0.35); }
+
+  /* ---------- ordered flow ---------- */
+  .flow{ list-style:none; margin: 20px 0; padding:0; counter-reset: step; }
+  .flow li{
+    counter-increment: step; position:relative; padding: 4px 0 22px 40px; font-size: 13.5px; color: var(--text-muted);
+  }
+  .flow li::before{
+    content: counter(step);
+    position:absolute; left:0; top:2px; width:24px; height:24px;
+    border:1px solid var(--amber); color: var(--amber); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+  }
+  .flow li::after{
+    content:""; position:absolute; left:11px; top:28px; bottom:0; width:1px; background: var(--border);
+  }
+  .flow li:last-child::after{ display:none; }
+  .flow li b{ color: var(--text); }
+
+  /* ---------- card grid (gradio panels / roadmap) ---------- */
+  .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; margin: 20px 0; }
+  .card{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .card .name{ font-family: var(--display); font-weight:700; font-size:14.5px; color: var(--text); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .card .dot{ width:7px; height:7px; border-radius:50%; background: var(--cyan); flex-shrink:0; }
+  .card ul{ margin:0; padding-left:18px; font-size: 12.5px; color: var(--text-muted); }
+  .card ul li{ margin-bottom:5px; }
+
+  /* ---------- roadmap phases ---------- */
+  .phase{ margin-bottom: 30px; }
+  .phase-head{ display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+  .phase-head .badge{
+    font-family: var(--display); font-weight:800; font-size:11px; padding: 4px 10px; border-radius:5px;
+  }
+  .badge-mvp{ background: var(--amber); color:#0a0c10; }
+  .badge-p2{ background: var(--surface-2); color: var(--cyan); border:1px solid rgba(79,209,197,0.4); }
+  .badge-nice{ background: var(--surface-2); color: var(--text-dim); border:1px solid var(--border); }
+  .phase-head h4{ font-family: var(--display); font-size: 14px; margin:0; color: var(--text); }
+  .checklist{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:8px; }
+  .checklist li{
+    font-size: 13px; color: var(--text-muted); padding: 10px 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius:7px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .checklist li::before{ content:"▢"; color: var(--text-dim); flex-shrink:0; }
+
+  /* ---------- risks ---------- */
+  .risk{
+    display:grid; grid-template-columns: 130px 1fr; gap:18px;
+    padding: 16px 0; border-bottom: 1px solid var(--border); align-items:start;
+  }
+  .risk:last-child{ border-bottom:none; }
+  .risk .rlabel{ font-size: 11px; letter-spacing:0.04em; text-transform:uppercase; color: var(--red); padding-top:2px; }
+  .risk p{ margin:0; font-size: 13.5px; }
+  .risk b{ color: var(--text); }
+
+  footer{
+    border-top: 1px solid var(--border); padding: 26px 28px; text-align:center;
+    color: var(--text-dim); font-size: 11.5px; max-width: 1180px; margin: 0 auto;
+  }
+
+  @media (max-width: 720px){
+    .topbar-inner{ padding: 16px 18px; }
+    .tabs{ top: 78px; padding: 0 18px; }
+    main{ padding: 32px 18px 80px; }
+    h2.title{ font-size: 24px; }
+    .rung{ grid-template-columns: 50px 1fr 72px; gap:8px; }
+    .diagram{ flex-direction:column; padding: 18px; }
+    .dia-arrow{ transform: rotate(90deg); padding: 4px 0; }
+    .decisions li{ grid-template-columns: 1fr; gap:6px; }
+    .risk{ grid-template-columns: 1fr; gap:4px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark">Q4</div>
+      <div class="brand-text">
+        <h1>GGUF Inference Rig</h1>
+        <p>RunPod model-serving spec — local GGUF models, OpenAI-compatible API, single Gradio control panel.</p>
+      </div>
+    </div>
+    <div class="meta-pills">
+      <span class="pill">v0.1 · draft</span>
+      <span class="pill pill-live">RunPod Pod · single GPU</span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="overview">01 Overview</button>
+  <button class="tab" data-tab="architecture">02 Architecture</button>
+  <button class="tab" data-tab="storage">03 Storage</button>
+  <button class="tab" data-tab="models">04 Model Mgmt</button>
+  <button class="tab" data-tab="api">05 API Layer</button>
+  <button class="tab" data-tab="ui">06 Gradio UI</button>
+  <button class="tab" data-tab="compat">07 Compatibility</button>
+  <button class="tab" data-tab="roadmap">08 Roadmap</button>
+  <button class="tab" data-tab="risks">09 Risks</button>
+</nav>
+
+<main>
+
+  <!-- 01 OVERVIEW -->
+  <section id="overview" class="panel active">
+    <p class="eyebrow">Spec · Draft</p>
+    <h2 class="title">One pod, any GGUF model, one API.</h2>
+    <p class="lead">A self-hosted RunPod script that serves quantized GGUF checkpoints behind an OpenAI-compatible
+    endpoint, fully controlled from a single Gradio panel. Models live on the network volume only — the container
+    filesystem is never the source of truth.</p>
+
+    <h3 class="sub">Why GGUF: same checkpoint, four ways to fit it on a card</h3>
+    <div class="ladder">
+      <div class="rung">
+        <span class="label">F16</span>
+        <div class="track"><div class="fill" style="width:100%; background:var(--amber);">source / fallback only</div></div>
+        <span class="size">~24 GB</span>
+      </div>
+      <div class="rung">
+        <span class="label">Q8_0</span>
+        <div class="track"><div class="fill" style="width:78%; background:#d9a85a;">near-lossless</div></div>
+        <span class="size">~13 GB</span>
+      </div>
+      <div class="rung">
+        <span class="label">Q5_K_M</span>
+        <div class="track"><div class="fill" style="width:55%; background:#7fc2bd;">daily-driver quality</div></div>
+        <span class="size">~8.5 GB</span>
+      </div>
+      <div class="rung">
+        <span class="label">Q4_K_M</span>
+        <div class="track"><div class="fill" style="width:38%; background:var(--cyan);">fits smaller cards</div></div>
+        <span class="size">~7.3 GB</span>
+      </div>
+    </div>
+    <p class="ladder-caption">Approximate sizes for a 12B dense model. The Gradio model browser should always show this
+    trade-off before a download starts, not just a flat file list.</p>
+
+    <h3 class="sub">Key decisions</h3>
+    <ul class="decisions">
+      <li>
+        <span class="status status-done">✓ DECIDED</span>
+        <span>Build on <code>llama-server</code> as the inference + API process. No custom OpenAI-compat layer gets written from scratch.</span>
+      </li>
+      <li>
+        <span class="status status-done">✓ DECIDED</span>
+        <span>All weights resolve to the network volume via <code>HF_HOME</code> / <code>local_dir</code>. The container's default HF cache is never used.</span>
+      </li>
+      <li>
+        <span class="status status-done">✓ DECIDED</span>
+        <span>Gemma 4 12B is a standard dense multimodal model — it is <b>not</b> diffusion-based — and is in scope from day one.</span>
+      </li>
+      <li>
+        <span class="status status-blocked">⏳ BLOCKED</span>
+        <span>DiffusionGemma (26B-A4B, block-diffusion) is excluded from MVP. Mainline llama.cpp support is not merged (tracking PR #24427).</span>
+      </li>
+      <li>
+        <span class="status status-done">✓ DECIDED</span>
+        <span>Pod, not Serverless. On RTX 6000 Ada 48GB: Pod ≈ $0.77/hr vs Serverless ≈ $1.90/hr — roughly 2.5× markup, and serverless cold starts get worse with multi-GB GGUF loads. Gradio also needs a long-lived process regardless. Stop the pod manually when idle; GPU billing stops with it, only network-volume storage keeps accruing.</span>
+      </li>
+      <li>
+        <span class="status status-done">✓ DECIDED</span>
+        <span>One active model in <code>llama-server</code> at a time, switched on demand. The 48GB card has headroom for 2-3 concurrent models, but that's deliberately deferred — see Roadmap.</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- 02 ARCHITECTURE -->
+  <section id="architecture" class="panel">
+    <p class="eyebrow">System</p>
+    <h2 class="title">Control plane and data plane, kept separate</h2>
+    <p class="lead">Gradio owns nothing about inference itself — it just tells a process manager which model to run.
+    The process manager owns one <code>llama-server</code> child process at a time.</p>
+
+    <div class="diagram">
+      <div class="dia-col">
+        <div class="dia-box"><div class="name">Browser</div><div class="desc">Gradio UI, internal port</div></div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-col">
+        <div class="dia-box accent"><div class="name">Gradio app</div><div class="desc">control plane: library, switch, logs, GPU stats</div></div>
+        <div class="dia-box"><div class="name">Process manager</div><div class="desc">spawns / kills / health-checks llama-server</div></div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-col">
+        <div class="dia-box cyan"><div class="name">llama-server</div><div class="desc">data plane: OpenAI-compatible API, port 8000</div></div>
+      </div>
+      <div class="dia-arrow">→</div>
+      <div class="dia-col">
+        <div class="dia-box"><div class="name">GPU</div><div class="desc">one active model loaded in VRAM</div></div>
+        <div class="dia-box"><div class="name">Network volume</div><div class="desc">.gguf + mmproj files, active_model.json</div></div>
+      </div>
+    </div>
+
+    <h3 class="sub">Components</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Responsibility</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Gradio app</td><td>Browse / download models, switch active model, show logs &amp; GPU stats</td><td>Single process, owns the process manager instance</td></tr>
+        <tr><td>Process manager</td><td>Spawn, kill and health-check the <code>llama-server</code> subprocess</td><td>Exposes <code>switch_model()</code>, <code>restart()</code>, <code>status()</code></td></tr>
+        <tr><td>llama-server</td><td>Inference + OpenAI-compatible HTTP API</td><td>One instance = one active model at a time (MVP constraint)</td></tr>
+        <tr><td>Network volume</td><td>Persistent storage for every <code>.gguf</code> / <code>mmproj</code> file</td><td>Mounted at a fixed path, survives pod restarts</td></tr>
+      </tbody>
+    </table>
+    <p>The "one model at a time" constraint is a deliberate MVP simplification — see <a href="#" onclick="showTab('roadmap');return false;">Roadmap</a> for the multi-instance, multi-port alternative.</p>
+  </section>
+
+  <!-- 03 STORAGE -->
+  <section id="storage" class="panel">
+    <p class="eyebrow">Storage</p>
+    <h2 class="title">If it's not on the volume, it doesn't exist</h2>
+    <p class="lead">Every download path is pinned to the network volume before any Hugging Face call happens. The
+    container's local disk is treated as ephemeral and is never relied on for model weights.</p>
+
+    <h3 class="sub">Environment</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Points to</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>HF_HOME</td><td>/workspace/.hf</td><td>Forces hub metadata + default cache onto the volume</td></tr>
+        <tr><td>HF_HUB_CACHE</td><td>/workspace/.hf/hub</td><td>Belt-and-suspenders override, set explicitly</td></tr>
+        <tr><td>HF_HUB_ENABLE_HF_TRANSFER</td><td>1</td><td>Faster multi-connection downloads for large GGUF files</td></tr>
+      </tbody>
+    </table>
+    <p>These must be set <b>before</b> <code>huggingface_hub</code> is imported anywhere in the process — including inside Gradio's own startup.</p>
+
+    <h3 class="sub">Volume layout</h3>
+    <table>
+      <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td>/workspace/models/&lt;org&gt;/&lt;repo&gt;/*.gguf</td><td>Downloaded quant files, one per chosen quant</td></tr>
+        <tr><td>/workspace/models/&lt;org&gt;/&lt;repo&gt;/mmproj-*.gguf</td><td>Vision/audio projector for multimodal models</td></tr>
+        <tr><td>/workspace/.state/active_model.json</td><td>Last active model + run flags, read on pod boot</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">Cost of keeping 2-3 models around</h3>
+    <p>Network Volume runs ~$0.07/GB/month, not Container Volume (which bills 2× while a pod is stopped). Three 12B
+    models at Q5_K_M/Q8_0 quants land around 25-45 GB total — roughly <b>$1.5-3/month</b>. Storage is noise next to the
+    GPU bill; no need to quantize harder just to save disk space.</p>
+
+    <h3 class="sub">Download mechanics</h3>
+    <p>Use <code>hf_hub_download(..., local_dir=&lt;volume path&gt;, allow_patterns=[chosen_file])</code> rather than
+    cloning a full repo — most GGUF repos contain every quant, and only one is needed per download. A free-space check
+    against the volume runs before the transfer starts, not after.</p>
+  </section>
+
+  <!-- 04 MODEL MANAGEMENT -->
+  <section id="models" class="panel">
+    <p class="eyebrow">Lifecycle</p>
+    <h2 class="title">Download, quantize-aware, then switch</h2>
+    <p class="lead">Two flows: pulling a new model onto the volume, and pointing <code>llama-server</code> at a model
+    that's already there.</p>
+
+    <h3 class="sub">Download flow</h3>
+    <ol class="flow">
+      <li><b>Paste a HF repo id</b> — plus an access token for gated or private repos. Token is stored as a secret, never echoed back into the UI.</li>
+      <li><b>List available files</b> via the HF API, grouped by quant (Q4_K_M, Q5_K_M, Q8_0, …) with size shown against the ladder from Overview.</li>
+      <li><b>Pick a quant</b> — UI checks it against free volume space before allowing the download to start.</li>
+      <li><b>Download straight to the volume</b> with a progress bar; no container-local intermediate copy.</li>
+      <li><b>Auto-detect an <code>mmproj</code> file</b> in the same repo (vision/audio models like Gemma 4 12B) and offer to pull it alongside.</li>
+    </ol>
+
+    <h3 class="sub">Switch flow</h3>
+    <ol class="flow">
+      <li>Pick a model from <b>"Models on volume"</b> — already-downloaded files only, no network call.</li>
+      <li>Process manager <b>stops</b> the current <code>llama-server</code> cleanly.</li>
+      <li>Process manager <b>starts</b> a new one with the selected file (+ <code>mmproj</code> if present).</li>
+      <li><code>active_model.json</code> is written so the same model reloads automatically after a pod restart.</li>
+    </ol>
+
+    <h3 class="sub">Per-model run config</h3>
+    <p>Kept editable per model rather than hard-coded: context length, <code>-ngl</code> (GPU layers offloaded),
+    batch size, and chat-template override for repos with non-standard metadata.</p>
+  </section>
+
+  <!-- 05 API LAYER -->
+  <section id="api" class="panel">
+    <p class="eyebrow">API</p>
+    <h2 class="title">llama-server already speaks OpenAI</h2>
+    <p class="lead">No custom API layer gets built. <code>llama-server</code> ships an OpenAI-compatible surface —
+    Gradio is a control panel in front of it, not a proxy.</p>
+
+    <table>
+      <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>/v1/chat/completions</td><td>Primary chat endpoint, streaming supported</td></tr>
+        <tr><td>/v1/completions</td><td>Raw completion, no chat template applied</td></tr>
+        <tr><td>/v1/embeddings</td><td>Embedding vectors, if the loaded model supports it</td></tr>
+        <tr><td>/v1/models</td><td>Reports the currently loaded model — useful for client-side sanity checks</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">Auth &amp; exposure</h3>
+    <p>RunPod pod ports are reachable publicly by default, so <code>--api-key</code> is passed to
+    <code>llama-server</code> from the first MVP build, not added later. Every request requires a Bearer token.
+    Gradio itself talks to <code>llama-server</code> over <code>localhost</code> — only the API port needs to be
+    exposed if the goal is pure API consumption from outside the pod.</p>
+  </section>
+
+  <!-- 06 GRADIO UI -->
+  <section id="ui" class="panel">
+    <p class="eyebrow">Control panel</p>
+    <h2 class="title">Five panels, mirrored as Gradio tabs</h2>
+    <p class="lead">The Gradio app's internal structure mirrors this document's own tab layout — each panel owns one job.</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="name"><span class="dot"></span>Dashboard</div>
+        <ul>
+          <li>Active model name + quant</li>
+          <li>VRAM used / free</li>
+          <li>Uptime, request count</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="name"><span class="dot"></span>Model Library</div>
+        <ul>
+          <li>Models already on volume</li>
+          <li>"Download new" form (repo, token, quant)</li>
+          <li>Free space indicator</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="name"><span class="dot"></span>Switch Control</div>
+        <ul>
+          <li>One-click activate</li>
+          <li>Confirmation if requests are in flight</li>
+          <li>Per-model run config (ctx, -ngl, batch)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="name"><span class="dot"></span>Console</div>
+        <ul>
+          <li>Tailed stdout/stderr from llama-server</li>
+          <li>Auto-scroll, clear on switch</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="name"><span class="dot"></span>Settings</div>
+        <ul>
+          <li>API key management</li>
+          <li>Default quant preference</li>
+          <li>HF token storage</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 COMPATIBILITY -->
+  <section id="compat" class="panel">
+    <p class="eyebrow">Model compatibility</p>
+    <h2 class="title">Check the architecture before the download, not after</h2>
+    <p class="lead">"Unknown model architecture" only surfaces at load time — after a potentially multi-gigabyte
+    download. Validate against llama.cpp's supported-architecture list first.</p>
+
+    <table>
+      <thead><tr><th>Model</th><th>Type</th><th>Works via llama-server today</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Gemma 4 12B</td>
+          <td>Dense, multimodal (text/image/audio/video → text)</td>
+          <td><span class="tag tag-yes">Yes</span></td>
+          <td>Needs the matching <code>mmproj</code> file for image/audio input</td>
+        </tr>
+        <tr>
+          <td>DiffusionGemma 26B-A4B</td>
+          <td>Block-diffusion MoE (3.8B active)</td>
+          <td><span class="tag tag-blocked">Blocked</span></td>
+          <td>PR #24427 unmerged (conflicts as of Jun 18). Needs <code>llama-diffusion-cli</code>, not <code>llama-server</code> — no OpenAI API surface yet. vLLM supports it fully, but that's safetensors, not GGUF.</td>
+        </tr>
+        <tr>
+          <td>Other standard llama.cpp archs</td>
+          <td>Dense / MoE, autoregressive</td>
+          <td><span class="tag tag-yes">Yes</span></td>
+          <td>Default case — most GGUF repos on HF</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 08 ROADMAP -->
+  <section id="roadmap" class="panel">
+    <p class="eyebrow">Build order</p>
+    <h2 class="title">MVP first, then resilience, then concurrency</h2>
+
+    <div class="phase">
+      <div class="phase-head"><span class="badge badge-mvp">MVP</span><h4>Ships in the first working build</h4></div>
+      <ul class="checklist">
+        <li>HF download to volume, with token support</li>
+        <li>Single active llama-server, OpenAI-compatible API</li>
+        <li>Gradio: library, switch, console</li>
+        <li><code>active_model.json</code> persistence across restarts</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="badge badge-p2">Phase 2</span><h4>Resilience and safety</h4></div>
+      <ul class="checklist">
+        <li>Auto health-check + restart on crash</li>
+        <li>Disk-space guard + quant size preview before download</li>
+        <li>mmproj auto-pairing for multimodal repos</li>
+        <li>API key auth enforced by default</li>
+        <li>Multi-GPU tensor-split config</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><span class="badge badge-nice">Later</span><h4>Concurrency &amp; experimental</h4></div>
+      <ul class="checklist">
+        <li>Multiple models on separate ports behind a small router</li>
+        <li>DiffusionGemma support once PR #24427 lands in mainline</li>
+        <li>Request queue / concurrency-limit UI</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 09 RISKS -->
+  <section id="risks" class="panel">
+    <p class="eyebrow">Open questions</p>
+    <h2 class="title">What could go wrong, on purpose</h2>
+
+    <div class="risk">
+      <span class="rlabel">Exposure</span>
+      <p><b>Public port.</b> RunPod ports are reachable by default — the API key requirement is part of the MVP, not a follow-up task.</p>
+    </div>
+    <div class="risk">
+      <span class="rlabel">Concurrency</span>
+      <p><b>Single-model constraint.</b> Switching kills in-flight requests. MVP needs at least a clear warning before switching; a "draining" state is a Phase 2 candidate.</p>
+    </div>
+    <div class="risk">
+      <span class="rlabel">Upstream</span>
+      <p><b>DiffusionGemma timeline</b> is entirely outside this project's control — tied to llama.cpp PR #24427 merging.</p>
+    </div>
+    <div class="risk">
+      <span class="rlabel">Disk</span>
+      <p><b>Volume sizing.</b> Keeping F16 plus several quants of the same model fills a volume fast. Worth a retention or cleanup policy once more than a couple of models are in rotation.</p>
+    </div>
+    <div class="risk">
+      <span class="rlabel">Secrets</span>
+      <p><b>HF token handling.</b> Must never land in logs, in <code>active_model.json</code>, or in any other file written to the volume.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>GGUF Inference Rig — internal spec, draft v0.1</footer>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.panel');
+
+  function showTab(id){
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    panels.forEach(p => p.classList.toggle('active', p.id === id));
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  });
+</script>
+
+</body>
+</html>
